@@ -1,5 +1,6 @@
 files = [
     "mkrvidor4000_top.sv",
+    "MIPI_RX_ST.v"
 ]
 
 modules = {

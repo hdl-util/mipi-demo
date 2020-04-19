@@ -139,21 +139,21 @@ localparam AUDIO_RATE = 48000;
 localparam WAVE_RATE = 480;
 
 logic [AUDIO_BIT_WIDTH-1:0] audio_sample_word;
-sawtooth #(.BIT_WIDTH(AUDIO_BIT_WIDTH), .SAMPLE_RATE(AUDIO_RATE), .WAVE_RATE(WAVE_RATE)) sawtooth (.clk_audio(clk_audio), .level(audio_sample_word));
+// sawtooth #(.BIT_WIDTH(AUDIO_BIT_WIDTH), .SAMPLE_RATE(AUDIO_RATE), .WAVE_RATE(WAVE_RATE)) sawtooth (.clk_audio(clk_audio), .level(audio_sample_word));
 
 logic [23:0] rgb;
-logic [9:0] cx, cy;
-hdmi #(.VIDEO_ID_CODE(4), .DDRIO(1), .AUDIO_RATE(AUDIO_RATE), .AUDIO_BIT_WIDTH(AUDIO_BIT_WIDTH)) hdmi(.clk_pixel_x10(clk_pixel_x5), .clk_pixel(clk_pixel), .clk_audio(clk_audio), .rgb(rgb), .audio_sample_word('{audio_sample_word, audio_sample_word}), .tmds_p(HDMI_TX), .tmds_clock_p(HDMI_CLK), .tmds_n(HDMI_TX_N), .tmds_clock_n(HDMI_CLK_N), .cx(cx), .cy(cy));
+logic [9:0] cx, cy, screen_start_x, screen_start_y;
+hdmi #(.VIDEO_ID_CODE(1), .DDRIO(1), .AUDIO_RATE(AUDIO_RATE), .AUDIO_BIT_WIDTH(AUDIO_BIT_WIDTH)) hdmi(.clk_pixel_x10(clk_pixel_x5), .clk_pixel(clk_pixel), .clk_audio(clk_audio), .rgb(rgb), .audio_sample_word('{audio_sample_word, audio_sample_word}), .tmds_p(HDMI_TX), .tmds_clock_p(HDMI_CLK), .tmds_n(HDMI_TX_N), .tmds_clock_n(HDMI_CLK_N), .cx(cx), .cy(cy), .screen_start_x(screen_start_x), .screen_start_y(screen_start_y));
 
 
-logic [1:0] mode = 2'd2; // Immediately enter streaming
+logic [1:0] mode = 2'd0;
 logic [1:0] resolution = 2'd3; // 640x480 @ 30FPS
-logic format = 1'd1;
+logic format = 1'd0;
 logic ready;
 logic model_err;
 logic nack_err;
 
-imx219 imx219 (
+imx219 #(.TARGET_SCL_RATE(100000)) imx219 (
     .clk_in(CLK_48MHZ),
     .scl(MIPI_SCL),
     .sda(MIPI_SDA),
@@ -162,14 +162,91 @@ imx219 imx219 (
     .format(format),
     .ready(ready),
     .power_enable(MIPI_GP[0]),
-    // IMX219 Model ID did not match
     .model_err(model_err),
     .nack_err(nack_err)
 );
 
+logic mipi_interrupt;
+logic [7:0] image_data [3:0];
+logic [5:0] image_data_type;
+logic image_data_enable;
+logic [15:0] word_count;
+logic frame_start, frame_end;
+logic [1:0] enable;
 camera #(.NUM_LANES(2)) camera (
     .clock_p(MIPI_CLK),
-    .data_p(MIPI_D)
+    .data_p(MIPI_D),
+    .interrupt(mipi_interrupt),
+    .image_data(image_data),
+    .image_data_type(image_data_type),
+    .image_data_enable(image_data_enable),
+    .word_count(word_count),
+    .frame_start(frame_start),
+    .frame_end(frame_end)
 );
+
+// logic [7:0] raw [3:0];
+// logic raw_enable;
+// raw8 raw8 (.image_data(image_data), .image_data_enable(image_data_enable), .raw(raw), .raw_enable(raw_enable));
+
+logic [25:0] camera_counter = 26'd0;
+always @(posedge CLK_48MHZ)
+  camera_counter <= camera_counter + 1'd1;
+
+always @(posedge CLK_48MHZ)
+  if (ready && mode == 2'd0)
+    mode <= 2'd1;
+  else if (ready && mode == 2'd1 && camera_counter == 26'd67108863)
+    mode <= 2'd2;
+
+// logic [7:0] ring_buffer [32767:0];
+// logic [14:0] producer = 0;
+// logic [14:0] consumer = 0;
+
+// always @(posedge clk_pixel)
+// begin
+//  if (cx >= screen_start_x && cy >= screen_start_y && producer != consumer)
+//   begin
+//     rgb <= ring_buffer[consumer];
+//     consumer <= consumer + 1'd1;
+//   end
+// end
+
+// logic [1:0] countup = 2'd0;
+// always @(posedge MIPI_CLK)
+// begin
+//   if (image_data_enable)
+//   begin
+//     ring_buffer[producer] <= image_data[2'd0][7:4];
+//     countup <= 2'd1;
+//     producer <= producer + 1'd1;
+//   end
+//   else if (countup != 2'd0)
+//   begin
+//     ring_buffer[producer] <= image_data[countup][7:4];
+//     countup <= countup + 1'd1;
+//     producer <= producer + 1'd1;
+//   end
+// end
+
+logic [7:0] codepoints [0:3];
+always @(posedge MIPI_CLK) if (image_data_enable) codepoints <= '{image_data[1][7:4] + 8'h30, image_data[1][7:4] + 8'h30, image_data[0][7:4] + 8'h30, image_data[0][3:0] + 8'h30};
+
+logic [1:0] counter = 2'd0;
+logic [5:0] prevcy = 6'd0;
+always @(posedge clk_pixel)
+begin
+    if (cy == 10'd0)
+    begin
+        prevcy <= 6'd0;
+    end
+    else if (prevcy != cy[9:4])
+    begin
+        counter <= counter + 1'd1;
+        prevcy <= cy[9:4];
+    end
+end
+
+console console(.clk_pixel(clk_pixel), .codepoint(codepoints[counter]), .attribute({cx[9], cy[8:6], cx[8:5]}), .cx(cx), .cy(cy), .rgb(rgb));
 
 endmodule

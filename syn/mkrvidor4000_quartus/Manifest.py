@@ -3,7 +3,7 @@ action = "synthesis"
 
 syn_family = "CYCLONE 10 LP"
 syn_device = "10CL016Y"
-syn_grade = "C6G"
+syn_grade = "C8G"
 syn_package = "U256"
 syn_top = "mkrvidor4000_top"
 syn_project = "mipi-demo"

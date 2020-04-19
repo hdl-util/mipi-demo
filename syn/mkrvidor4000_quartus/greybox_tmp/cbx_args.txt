@@ -1,9 +1,0 @@
-INTENDED_DEVICE_FAMILY="Cyclone 10 LP"
-enable_bus_hold=FALSE
-number_of_channels=1
-use_differential_mode=TRUE
-use_dynamic_termination_control=FALSE
-DEVICE_FAMILY="Cyclone 10 LP"
-datain
-datain_b
-dataout
