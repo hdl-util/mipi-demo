@@ -1,7 +1,7 @@
 set_time_format -unit ns -decimal_places 3
 create_clock -name MIPI_CLK -period 15.38 [get_ports {MIPI_CLK}]
 create_clock -name CLK_48MHZ -period "48.0 MHz" [get_ports {CLK_48MHZ}]
-create_generated_clock -name SDRAM_CLK -source [get_pins mem_pll|altpll_component|auto_generated|pll1|clk[1]] [get_ports {SDRAM_CLK}]
+create_generated_clock -name SDRAM_CLK -source [get_pins mem_pll|altpll_component|auto_generated|pll1|clk[0]] [get_ports {SDRAM_CLK}]
 
 derive_pll_clocks
 derive_clock_uncertainty
