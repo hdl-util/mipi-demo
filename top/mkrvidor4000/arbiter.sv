@@ -22,14 +22,14 @@ module arbiter #(
 );
 
 logic [1:0] command = 2'd0;
-logic [21:0] data_address;
-logic [15:0] data_write;
+logic [21:0] data_address = 22'dx;
+logic [15:0] data_write = 16'dx;
 logic [15:0] data_read;
 logic data_read_valid;
 logic data_write_done;
 
 as4c4m16sa_controller #(
-    .CLK_RATE(100_000_000),
+    .CLK_RATE(98_000_000),
     .SPEED_GRADE(7),
     .READ_BURST_LENGTH(8),
     .WRITE_BURST(1),
@@ -53,10 +53,10 @@ as4c4m16sa_controller #(
     .dq(dq),
 );
 
-logic [31:0] mipi_buff_data;
-logic [3:0] mipi_buff_used;
+logic [15:0] mipi_buff_data;
+logic [4:0] mipi_buff_used;
 logic mipi_buff_read = 1'b0;
-dcfifo mipi_dcfifo (
+dcfifo_mixed_widths mipi_dcfifo (
             .data ({mipi_data[3], mipi_data[2], mipi_data[1], mipi_data[0]}),
             .rdclk (sdram_clk),
             .rdreq (mipi_buff_read),
@@ -75,9 +75,11 @@ defparam
     mipi_dcfifo.intended_device_family = "Cyclone 10 LP",
     mipi_dcfifo.lpm_numwords = 16,
     mipi_dcfifo.lpm_showahead = "ON",
-    mipi_dcfifo.lpm_type = "dcfifo",
+    mipi_dcfifo.lpm_type = "dcfifo_mixed_widths",
     mipi_dcfifo.lpm_width = 32,
     mipi_dcfifo.lpm_widthu = 4,
+    mipi_dcfifo.lpm_widthu_r = 5,
+    mipi_dcfifo.lpm_width_r = 16,
     mipi_dcfifo.overflow_checking = "ON",
     mipi_dcfifo.rdsync_delaypipe = 4,
     mipi_dcfifo.underflow_checking = "ON",
@@ -95,83 +97,85 @@ logic [4:0] pixel_buff_used;
 
 always @(posedge sdram_clk)
 begin
-    mipi_buff_read <= 1'b0;
-    pixel_buff_write <= 1'b0;
-    pixel_buff_data <= 16'dx;
+    data_write <= mipi_buff_data;
+    pixel_buff_data <= pixel_buff_data;
+end
+
+always @(posedge sdram_clk)
+begin
     if (command == 2'd0)
     begin
+        pixel_buff_write <= 1'b0;
         if (!pixel_buff_used[4]) // Read burst possible
         begin
+            mipi_buff_read <= 1'b0;
+
             command <= 2'd2;
-            data_write <= 16'dx;
             data_address <= pixel_address;
             sdram_countup <= 1'd0;
         end
-        else if (mipi_buff_used[3]) // Write burst possible
+        else if (mipi_buff_used >= 5'd8) // Write burst possible
         begin
             command <= 2'd1;
-            data_write <= mipi_buff_data[15:0];
             data_address <= mipi_address;
             sdram_countup <= 1'd1;
+            mipi_buff_read <= 1'b1;
         end
         else // Idle
         begin
             command <= 2'd0;
-            data_write <= 16'dx;
             data_address <= 22'dx;
             sdram_countup <= 3'dx;
+            mipi_buff_read <= 1'b0;
         end
     end
-    else if (command == 2'd2 && data_read_valid)
+    else if (command == 2'd2)
     begin
-        pixel_buff_data <= data_read;
-        pixel_buff_write <= 1'b1;
-        sdram_countup <= sdram_countup + 1'd1;
-        if (sdram_countup == 3'd7) // Last read
+        mipi_buff_read <= 1'b0;
+
+        if (data_read_valid)
         begin
-            command <= 2'd0;
-            pixel_address <= pixel_address + 22'd8 == 22'(VIDEO_END) ? 22'd0 : pixel_address + 22'd8;
-        end
-    end
-    else if (command == 2'd1 && data_write_done)
-    begin
-        sdram_countup <= sdram_countup + 1'd1;
-        if (sdram_countup[0])
-        begin
-            data_write <= mipi_buff_data[31:16];
-            mipi_buff_read <= 1'b1;
+            pixel_buff_write <= 1'b1;
+            sdram_countup <= sdram_countup + 1'd1;
+            if (sdram_countup == 3'd7) // Last read
+            begin
+                command <= 2'd0;
+                pixel_address <= pixel_address + 22'd8 == 22'(VIDEO_END) ? 22'd0 : pixel_address + 22'd8;
+            end
         end
         else
         begin
-            data_write <= mipi_buff_data[15:0];
-            mipi_buff_read <= 1'b0;
+            pixel_buff_write <= 1'b0;
         end
+    end
+    else if (command == 2'd1)
+    begin
+        pixel_buff_write <= 1'b0;
 
-        if (sdram_countup == 3'd7) // Last write
+        if (data_write_done)
         begin
-            command <= 2'd0;
-            mipi_address <= mipi_address + 22'd8 == 22'(VIDEO_END) ? 22'd0 : mipi_address + 22'd8;
+            mipi_buff_read <= 1'b1;
+            sdram_countup <= sdram_countup + 1'd1;
+            if (sdram_countup == 3'd7) // Last write
+            begin
+                command <= 2'd0;
+                mipi_address <= mipi_address + 22'd8 == 22'(VIDEO_END) ? 22'd0 : mipi_address + 22'd8;
+            end
+        end
+        else
+        begin
+            mipi_buff_read <= 1'b0;
         end
     end
 end
 
-
-logic [15:0] internal_pixel;
-logic pixel_countup = 1'd0;
-assign pixel = pixel_countup ? internal_pixel[15:8] : internal_pixel[7:0];
-always @(posedge pixel_clk)
-begin
-    if (pixel_enable) 
-        pixel_countup <= !pixel_countup;
-end
-
-dcfifo pixel_dcfifo (
+dcfifo_mixed_widths pixel_dcfifo (
             .data (pixel_buff_data),
             .rdclk (pixel_clk),
-            .rdreq (pixel_enable && pixel_countup == 1'b1),
+            .rdreq (pixel_enable),
             .wrclk (sdram_clk),
             .wrreq (pixel_buff_write),
-            .q (internal_pixel),
+            .q (pixel),
             .rdempty (),
             .wrusedw (pixel_buff_used),
             .aclr (),
@@ -184,9 +188,11 @@ defparam
     pixel_dcfifo.intended_device_family = "Cyclone 10 LP",
     pixel_dcfifo.lpm_numwords = 32,
     pixel_dcfifo.lpm_showahead = "ON",
-    pixel_dcfifo.lpm_type = "dcfifo",
+    pixel_dcfifo.lpm_type = "dcfifo_mixed_widths",
     pixel_dcfifo.lpm_width = 16,
     pixel_dcfifo.lpm_widthu = 5,
+    pixel_dcfifo.lpm_widthu_r = 6,
+    pixel_dcfifo.lpm_width_r = 8,
     pixel_dcfifo.overflow_checking = "ON",
     pixel_dcfifo.rdsync_delaypipe = 4,
     pixel_dcfifo.underflow_checking = "ON",

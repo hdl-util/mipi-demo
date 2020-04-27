@@ -107,16 +107,10 @@ cyclone10lp_oscillator osc (
     .oscena(1'b1)
 );
 
-// mem_pll mem_pll (
-//     .inclk0(CLK_48MHZ),
-//     .c0(SDRAM_CLK)
-// );
-
 wire clk_pixel_x5;
 wire clk_pixel;
 wire clk_audio;
-assign SDRAM_CLK = clk_pixel_x5;
-hdmi_pll hdmi_pll(.inclk0(CLK_48MHZ), .c0(clk_pixel), .c1(clk_pixel_x5), .c2(clk_audio));
+hdmi_pll hdmi_pll(.inclk0(CLK_48MHZ), .c0(clk_pixel), .c1(clk_pixel_x5), .c2(clk_audio), .c3(SDRAM_CLK));
 
 localparam AUDIO_BIT_WIDTH = 16;
 localparam AUDIO_RATE = 48000;
@@ -149,9 +143,9 @@ ov5647 #(.INPUT_CLK_RATE(48_000_000), .TARGET_SCL_RATE(100_000)) ov5647 (
     .nack_err(nack_err)
 );
 
-logic [7:0] image_data [0:3] = '{8'hff, 8'hff, 8'hff, 8'hff};
+logic [7:0] image_data [0:3];
 logic [5:0] image_data_type;
-logic image_data_enable = 1'b1;
+logic image_data_enable;
 logic [15:0] word_count;
 logic frame_start, frame_end;
 camera #(.NUM_LANES(2)) camera (
