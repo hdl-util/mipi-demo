@@ -41,3 +41,7 @@ work/
 ip_cores/
 *.jam
 *.svf
+greybox_tmp/
+*.qip
+*.ppf
+qmegawiz_errors_log.txt

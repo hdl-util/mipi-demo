@@ -100,38 +100,34 @@ module mkrvidor4000_top
 
 );
 
-// signal declaration
-wire OSC_CLK;
-
-wire FLASH_CLK;
-
 // internal oscillator
+wire OSC_CLK;
 cyclone10lp_oscillator osc ( 
     .clkout(OSC_CLK),
     .oscena(1'b1)
 );
 
-mem_pll mem_pll (
-    .inclk0(CLK_48MHZ),
-    .c0(SDRAM_CLK)
-);
+// mem_pll mem_pll (
+//     .inclk0(CLK_48MHZ),
+//     .c0(SDRAM_CLK)
+// );
 
 wire clk_pixel_x5;
 wire clk_pixel;
 wire clk_audio;
+assign SDRAM_CLK = clk_pixel_x5;
 hdmi_pll hdmi_pll(.inclk0(CLK_48MHZ), .c0(clk_pixel), .c1(clk_pixel_x5), .c2(clk_audio));
 
 localparam AUDIO_BIT_WIDTH = 16;
 localparam AUDIO_RATE = 48000;
 localparam WAVE_RATE = 480;
 
-logic [AUDIO_BIT_WIDTH-1:0] audio_sample_word;
+logic [AUDIO_BIT_WIDTH-1:0] audio_sample_word = AUDIO_BIT_WIDTH'(0);
 // sawtooth #(.BIT_WIDTH(AUDIO_BIT_WIDTH), .SAMPLE_RATE(AUDIO_RATE), .WAVE_RATE(WAVE_RATE)) sawtooth (.clk_audio(clk_audio), .level(audio_sample_word));
 
 logic [23:0] rgb;
 logic [9:0] cx, cy, screen_start_x, screen_start_y;
-hdmi #(.VIDEO_ID_CODE(1),
-.DDRIO(1), .AUDIO_RATE(AUDIO_RATE), .AUDIO_BIT_WIDTH(AUDIO_BIT_WIDTH)) hdmi(.clk_pixel_x10(clk_pixel_x5), .clk_pixel(clk_pixel), .clk_audio(clk_audio), .rgb(rgb), .audio_sample_word('{audio_sample_word, audio_sample_word}), .tmds_p(HDMI_TX), .tmds_clock_p(HDMI_CLK), .tmds_n(HDMI_TX_N), .tmds_clock_n(HDMI_CLK_N), .cx(cx), .cy(cy), .screen_start_x(screen_start_x), .screen_start_y(screen_start_y));
+hdmi #(.VIDEO_ID_CODE(1), .DDRIO(1), .AUDIO_RATE(AUDIO_RATE), .AUDIO_BIT_WIDTH(AUDIO_BIT_WIDTH)) hdmi(.clk_pixel_x10(clk_pixel_x5), .clk_pixel(clk_pixel), .clk_audio(clk_audio), .rgb(rgb), .audio_sample_word('{audio_sample_word, audio_sample_word}), .tmds_p(HDMI_TX), .tmds_clock_p(HDMI_CLK), .tmds_n(HDMI_TX_N), .tmds_clock_n(HDMI_CLK_N), .cx(cx), .cy(cy), .screen_start_x(screen_start_x), .screen_start_y(screen_start_y));
 
 logic [1:0] mode = 2'd0;
 logic [1:0] resolution = 2'd3; // 640x480 @ 30FPS
@@ -140,7 +136,7 @@ logic ready;
 logic model_err;
 logic nack_err;
 
-ov5647 #(.TARGET_SCL_RATE(100000)) ov5647 (
+ov5647 #(.INPUT_CLK_RATE(48_000_000), .TARGET_SCL_RATE(100_000)) ov5647 (
     .clk_in(CLK_48MHZ),
     .scl(MIPI_SCL),
     .sda(MIPI_SDA),
@@ -153,12 +149,11 @@ ov5647 #(.TARGET_SCL_RATE(100000)) ov5647 (
     .nack_err(nack_err)
 );
 
-logic [7:0] image_data [0:3];
+logic [7:0] image_data [0:3] = '{8'hff, 8'hff, 8'hff, 8'hff};
 logic [5:0] image_data_type;
-logic image_data_enable;
+logic image_data_enable = 1'b1;
 logic [15:0] word_count;
 logic frame_start, frame_end;
-logic [1:0] enable;
 camera #(.NUM_LANES(2)) camera (
     .clock_p(MIPI_CLK),
     .data_p(MIPI_D),
@@ -208,8 +203,7 @@ arbiter arbiter (
 
 always @(posedge clk_pixel)
 begin
-    if (pixel_enable)
-        rgb <= {pixel, pixel, pixel};
+    rgb <= {pixel, pixel, pixel};
 end
 
 // logic [7:0] codepoints [0:3];

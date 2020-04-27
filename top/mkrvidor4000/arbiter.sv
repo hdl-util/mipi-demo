@@ -28,7 +28,8 @@ logic [15:0] data_read;
 logic data_read_valid;
 logic data_write_done;
 
-as4c4m16sa #(
+as4c4m16sa_controller #(
+    .CLK_RATE(100_000_000),
     .SPEED_GRADE(7),
     .READ_BURST_LENGTH(8),
     .WRITE_BURST(1),
@@ -52,86 +53,144 @@ as4c4m16sa #(
     .dq(dq),
 );
 
-logic [15:0] mipi_buffer [0:31];
-logic [4:0] mipi_producer = 5'd0;
-logic [4:0] mipi_consumer = 5'd0;
+logic [31:0] mipi_buff_data;
+logic [3:0] mipi_buff_used;
+logic mipi_buff_read = 1'b0;
+dcfifo mipi_dcfifo (
+            .data ({mipi_data[3], mipi_data[2], mipi_data[1], mipi_data[0]}),
+            .rdclk (sdram_clk),
+            .rdreq (mipi_buff_read),
+            .wrclk (mipi_clk),
+            .wrreq (mipi_data_enable),
+            .q (mipi_buff_data),
+            .rdempty (),
+            .wrusedw (),
+            .aclr (),
+            .eccstatus (),
+            .rdfull (),
+            .rdusedw (mipi_buff_used),
+            .wrempty (),
+            .wrfull ());
+defparam
+    mipi_dcfifo.intended_device_family = "Cyclone 10 LP",
+    mipi_dcfifo.lpm_numwords = 16,
+    mipi_dcfifo.lpm_showahead = "ON",
+    mipi_dcfifo.lpm_type = "dcfifo",
+    mipi_dcfifo.lpm_width = 32,
+    mipi_dcfifo.lpm_widthu = 4,
+    mipi_dcfifo.overflow_checking = "ON",
+    mipi_dcfifo.rdsync_delaypipe = 4,
+    mipi_dcfifo.underflow_checking = "ON",
+    mipi_dcfifo.use_eab = "ON",
+    mipi_dcfifo.wrsync_delaypipe = 4;
 
-always @(posedge mipi_clk)
-begin
-    if (mipi_data_enable)
-    begin
-        mipi_buffer[mipi_producer] <= {mipi_data[0], mipi_data[1]};
-        mipi_buffer[mipi_producer + 1'd1] <= {mipi_data[2], mipi_data[3]};
-        mipi_producer <= mipi_producer + 5'd2;
-    end
-end
 
-
-logic [15:0] pixel_buffer [0:31];
-logic [4:0] pixel_producer = 5'd0;
-logic [4:0] pixel_consumer = 5'd0;
-logic pixel_countup = 1'd0;
-assign pixel = pixel_countup ? pixel_buffer[pixel_consumer][15:8] : pixel_buffer[pixel_consumer][7:0];
-
-always @(posedge pixel_clk)
-begin
-    if (pixel_enable)
-    begin
-        if (pixel_countup == 1'd1)
-            pixel_consumer <= pixel_consumer + 1'd1;
-        pixel_countup <= !pixel_countup;
-    end
-end
-
-logic [4:0] mipi_diff;
-assign mipi_diff = mipi_producer >= mipi_consumer ? mipi_producer - mipi_consumer : (~5'd0 - mipi_consumer) + mipi_producer;
-logic [4:0] pixel_diff;
-assign pixel_diff = pixel_producer >= pixel_consumer ? pixel_producer - pixel_consumer : (~5'd0 - pixel_consumer) + pixel_producer;
-
-logic [17:0] mipi_address;
-logic [17:0] pixel_address;
-
+logic [21:0] mipi_address = 22'd0;
+logic [21:0] pixel_address = 22'd0;
 logic [2:0] sdram_countup = 3'd0;
+
+logic pixel_buff_write = 1'b0;
+logic [15:0] pixel_buff_data = 16'd0;
+logic [4:0] pixel_buff_used;
+
 always @(posedge sdram_clk)
 begin
+    mipi_buff_read <= 1'b0;
+    pixel_buff_write <= 1'b0;
+    pixel_buff_data <= 16'dx;
     if (command == 2'd0)
     begin
-        if (pixel_diff < 5'd8) // Read is approaching starvation
+        if (!pixel_buff_used[4]) // Read burst possible
         begin
             command <= 2'd2;
+            data_write <= 16'dx;
             data_address <= pixel_address;
+            sdram_countup <= 1'd0;
         end
-        else if (mipi_diff >= 5'd15) // Ready to write
+        else if (mipi_buff_used[3]) // Write burst possible
         begin
             command <= 2'd1;
-            data_write <= mipi_buffer[mipi_consumer];
+            data_write <= mipi_buff_data[15:0];
             data_address <= mipi_address;
-            mipi_consumer <= mipi_consumer + 1'd1;
-            sdram_countup <= sdram_countup + 1'd1;
+            sdram_countup <= 1'd1;
+        end
+        else // Idle
+        begin
+            command <= 2'd0;
+            data_write <= 16'dx;
+            data_address <= 22'dx;
+            sdram_countup <= 3'dx;
         end
     end
     else if (command == 2'd2 && data_read_valid)
     begin
-        pixel_buffer[pixel_producer] <= data_read;
-        pixel_producer <= pixel_producer + 1'd1;
+        pixel_buff_data <= data_read;
+        pixel_buff_write <= 1'b1;
         sdram_countup <= sdram_countup + 1'd1;
         if (sdram_countup == 3'd7) // Last read
         begin
             command <= 2'd0;
-            pixel_address <= pixel_address + 8'd8 == 18'(VIDEO_END) ? 18'd0 : pixel_address + 18'd8;
+            pixel_address <= pixel_address + 22'd8 == 22'(VIDEO_END) ? 22'd0 : pixel_address + 22'd8;
         end
     end
     else if (command == 2'd1 && data_write_done)
     begin
-        data_write <= mipi_buffer[mipi_consumer];
-        mipi_consumer <= mipi_consumer + 1'd1;
         sdram_countup <= sdram_countup + 1'd1;
+        if (sdram_countup[0])
+        begin
+            data_write <= mipi_buff_data[31:16];
+            mipi_buff_read <= 1'b1;
+        end
+        else
+        begin
+            data_write <= mipi_buff_data[15:0];
+            mipi_buff_read <= 1'b0;
+        end
+
         if (sdram_countup == 3'd7) // Last write
         begin
             command <= 2'd0;
-            mipi_address <= mipi_address + 8'd8 == 18'(VIDEO_END) ? 18'd0 : mipi_address + 18'd8;
+            mipi_address <= mipi_address + 22'd8 == 22'(VIDEO_END) ? 22'd0 : mipi_address + 22'd8;
         end
     end
 end
+
+
+logic [15:0] internal_pixel;
+logic pixel_countup = 1'd0;
+assign pixel = pixel_countup ? internal_pixel[15:8] : internal_pixel[7:0];
+always @(posedge pixel_clk)
+begin
+    if (pixel_enable) 
+        pixel_countup <= !pixel_countup;
+end
+
+dcfifo pixel_dcfifo (
+            .data (pixel_buff_data),
+            .rdclk (pixel_clk),
+            .rdreq (pixel_enable && pixel_countup == 1'b1),
+            .wrclk (sdram_clk),
+            .wrreq (pixel_buff_write),
+            .q (internal_pixel),
+            .rdempty (),
+            .wrusedw (pixel_buff_used),
+            .aclr (),
+            .eccstatus (),
+            .rdfull (),
+            .rdusedw (),
+            .wrempty (),
+            .wrfull ());
+defparam
+    pixel_dcfifo.intended_device_family = "Cyclone 10 LP",
+    pixel_dcfifo.lpm_numwords = 32,
+    pixel_dcfifo.lpm_showahead = "ON",
+    pixel_dcfifo.lpm_type = "dcfifo",
+    pixel_dcfifo.lpm_width = 16,
+    pixel_dcfifo.lpm_widthu = 5,
+    pixel_dcfifo.overflow_checking = "ON",
+    pixel_dcfifo.rdsync_delaypipe = 4,
+    pixel_dcfifo.underflow_checking = "ON",
+    pixel_dcfifo.use_eab = "ON",
+    pixel_dcfifo.wrsync_delaypipe = 4;
 
 endmodule
