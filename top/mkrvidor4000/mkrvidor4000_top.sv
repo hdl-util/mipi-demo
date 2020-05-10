@@ -107,25 +107,27 @@ cyclone10lp_oscillator osc (
     .oscena(1'b1)
 );
 
+mem_pll mem_pll(.inclk0(CLK_48MHZ), .c0(SDRAM_CLK));
+
 wire clk_pixel_x5;
 wire clk_pixel;
 wire clk_audio;
-hdmi_pll hdmi_pll(.inclk0(CLK_48MHZ), .c0(clk_pixel), .c1(clk_pixel_x5), .c2(clk_audio), .c3(SDRAM_CLK));
+hdmi_pll hdmi_pll(.inclk0(CLK_48MHZ), .c0(clk_pixel), .c1(clk_pixel_x5), .c2(clk_audio));
 
 localparam AUDIO_BIT_WIDTH = 16;
 localparam AUDIO_RATE = 48000;
-localparam WAVE_RATE = 480;
+localparam WAVE_RATE = 240;
 
-logic [AUDIO_BIT_WIDTH-1:0] audio_sample_word = AUDIO_BIT_WIDTH'(0);
-// sawtooth #(.BIT_WIDTH(AUDIO_BIT_WIDTH), .SAMPLE_RATE(AUDIO_RATE), .WAVE_RATE(WAVE_RATE)) sawtooth (.clk_audio(clk_audio), .level(audio_sample_word));
+logic [AUDIO_BIT_WIDTH-1:0] audio_sample_word;
+sawtooth #(.BIT_WIDTH(AUDIO_BIT_WIDTH), .SAMPLE_RATE(AUDIO_RATE), .WAVE_RATE(WAVE_RATE)) sawtooth (.clk_audio(clk_audio), .level(audio_sample_word));
 
 logic [23:0] rgb;
 logic [9:0] cx, cy, screen_start_x, screen_start_y;
-hdmi #(.VIDEO_ID_CODE(1), .DDRIO(1), .AUDIO_RATE(AUDIO_RATE), .AUDIO_BIT_WIDTH(AUDIO_BIT_WIDTH)) hdmi(.clk_pixel_x10(clk_pixel_x5), .clk_pixel(clk_pixel), .clk_audio(clk_audio), .rgb(rgb), .audio_sample_word('{audio_sample_word, audio_sample_word}), .tmds_p(HDMI_TX), .tmds_clock_p(HDMI_CLK), .tmds_n(HDMI_TX_N), .tmds_clock_n(HDMI_CLK_N), .cx(cx), .cy(cy), .screen_start_x(screen_start_x), .screen_start_y(screen_start_y));
+hdmi #(.VIDEO_ID_CODE(1), .DDRIO(1),.AUDIO_RATE(AUDIO_RATE), .AUDIO_BIT_WIDTH(AUDIO_BIT_WIDTH)) hdmi(.clk_pixel_x10(clk_pixel_x5), .clk_pixel(clk_pixel), .clk_audio(clk_audio), .rgb(rgb), .audio_sample_word('{audio_sample_word >> 9, audio_sample_word >> 9}), .tmds_p(HDMI_TX), .tmds_clock_p(HDMI_CLK), .tmds_n(HDMI_TX_N), .tmds_clock_n(HDMI_CLK_N), .cx(cx), .cy(cy), .screen_start_x(screen_start_x), .screen_start_y(screen_start_y));
 
 logic [1:0] mode = 2'd0;
 logic [1:0] resolution = 2'd3; // 640x480 @ 30FPS
-logic format = 1'd0;
+logic format = 1'd0; // RAW8
 logic ready;
 logic model_err;
 logic nack_err;
@@ -176,6 +178,7 @@ always @(posedge CLK_48MHZ)
 logic pixel_enable;
 assign pixel_enable = cx >= screen_start_x && cy >= screen_start_y;
 logic [7:0] pixel;
+
 arbiter arbiter (
     .pixel_clk(clk_pixel),
     .pixel_enable(pixel_enable),
@@ -195,10 +198,8 @@ arbiter arbiter (
     .dq(SDRAM_DQ)
 );
 
-always @(posedge clk_pixel)
-begin
+always_ff @(posedge clk_pixel)
     rgb <= {pixel, pixel, pixel};
-end
 
 // logic [7:0] codepoints [0:3];
 // always @(posedge SDRAM_CLK) if (image_data_enable) codepoints <= '{pixel_producer + 8'h30, mipi_consumer + 8'h30, 8'h30 + 8'(command), 8'h29};//'{image_data[1][7:4] + 8'h30, image_data[1][7:4] + 8'h30, image_data[0][7:4] + 8'h30, image_data[0][3:0] + 8'h30};

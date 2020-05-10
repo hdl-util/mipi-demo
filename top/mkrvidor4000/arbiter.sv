@@ -1,5 +1,5 @@
 module arbiter #(
-    parameter VIDEO_END = 153600
+    parameter VIDEO_END = (640 * 480) / 2
 ) (
     input logic pixel_clk,
     input logic pixel_enable,
@@ -29,7 +29,7 @@ logic data_read_valid;
 logic data_write_done;
 
 as4c4m16sa_controller #(
-    .CLK_RATE(98_000_000),
+    .CLK_RATE(100_000_000),
     .SPEED_GRADE(7),
     .READ_BURST_LENGTH(8),
     .WRITE_BURST(1),
@@ -58,10 +58,10 @@ logic [4:0] mipi_buff_used;
 logic mipi_buff_read = 1'b0;
 dcfifo_mixed_widths mipi_dcfifo (
             .data ({mipi_data[3], mipi_data[2], mipi_data[1], mipi_data[0]}),
-            .rdclk (sdram_clk),
-            .rdreq (mipi_buff_read),
             .wrclk (mipi_clk),
             .wrreq (mipi_data_enable),
+            .rdclk (sdram_clk),
+            .rdreq (mipi_buff_read),
             .q (mipi_buff_data),
             .rdempty (),
             .wrusedw (),
@@ -95,11 +95,8 @@ logic pixel_buff_write = 1'b0;
 logic [15:0] pixel_buff_data = 16'd0;
 logic [4:0] pixel_buff_used;
 
-always @(posedge sdram_clk)
-begin
-    data_write <= mipi_buff_data;
-    pixel_buff_data <= pixel_buff_data;
-end
+always_ff @(posedge sdram_clk)
+    pixel_buff_data <= data_read;
 
 always @(posedge sdram_clk)
 begin
@@ -109,17 +106,19 @@ begin
         if (!pixel_buff_used[4]) // Read burst possible
         begin
             mipi_buff_read <= 1'b0;
+            data_write <= 16'dx;
 
             command <= 2'd2;
             data_address <= pixel_address;
             sdram_countup <= 1'd0;
         end
-        else if (mipi_buff_used >= 5'd8) // Write burst possible
+        else if (mipi_buff_used[4]) // Write burst possible
         begin
             command <= 2'd1;
             data_address <= mipi_address;
             sdram_countup <= 1'd1;
             mipi_buff_read <= 1'b1;
+            data_write <= mipi_buff_data;
         end
         else // Idle
         begin
@@ -127,11 +126,13 @@ begin
             data_address <= 22'dx;
             sdram_countup <= 3'dx;
             mipi_buff_read <= 1'b0;
+            data_write <= 16'dx;
         end
     end
-    else if (command == 2'd2)
+    else if (command == 2'd2) // Reading
     begin
         mipi_buff_read <= 1'b0;
+        data_write <= 16'dx;
 
         if (data_read_valid)
         begin
@@ -148,13 +149,14 @@ begin
             pixel_buff_write <= 1'b0;
         end
     end
-    else if (command == 2'd1)
+    else if (command == 2'd1) // Writing
     begin
         pixel_buff_write <= 1'b0;
 
         if (data_write_done)
         begin
             mipi_buff_read <= 1'b1;
+            data_write <= mipi_buff_data;
             sdram_countup <= sdram_countup + 1'd1;
             if (sdram_countup == 3'd7) // Last write
             begin
@@ -171,10 +173,10 @@ end
 
 dcfifo_mixed_widths pixel_dcfifo (
             .data (pixel_buff_data),
-            .rdclk (pixel_clk),
-            .rdreq (pixel_enable),
             .wrclk (sdram_clk),
             .wrreq (pixel_buff_write),
+            .rdclk (pixel_clk),
+            .rdreq (pixel_enable),
             .q (pixel),
             .rdempty (),
             .wrusedw (pixel_buff_used),
