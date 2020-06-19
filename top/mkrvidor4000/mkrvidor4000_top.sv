@@ -23,56 +23,6 @@ module mkrvidor4000_top
     inout [6:0] MKR_A,
     inout [14:0] MKR_D,
 
-    // Mini PCIe
-    inout PEX_RST,
-    inout PEX_PIN6,
-    inout PEX_PIN8,
-    inout PEX_PIN10,
-    input PEX_PIN11,
-    inout PEX_PIN12,
-    input PEX_PIN13,
-    inout PEX_PIN14,
-    inout PEX_PIN16,
-    inout PEX_PIN20,
-    input PEX_PIN23,
-    input PEX_PIN25,
-    inout PEX_PIN28,
-    inout PEX_PIN30,
-    input PEX_PIN31,
-    inout PEX_PIN32,
-    input PEX_PIN33,
-    inout PEX_PIN42,
-    inout PEX_PIN44,
-    inout PEX_PIN45,
-    inout PEX_PIN46,
-    inout PEX_PIN47,
-    inout PEX_PIN48,
-    inout PEX_PIN49,
-    inout PEX_PIN51,
-
-    // NINA interface
-    inout WM_PIO1,
-    inout WM_PIO2,
-    inout WM_PIO3,
-    inout WM_PIO4,
-    inout WM_PIO5,
-    inout WM_PIO7,
-    inout WM_PIO8,
-    inout WM_PIO18,
-    inout WM_PIO20,
-    inout WM_PIO21,
-    inout WM_PIO27,
-    inout WM_PIO28,
-    inout WM_PIO29,
-    inout WM_PIO31,
-    input WM_PIO32,
-    inout WM_PIO34,
-    inout WM_PIO35,
-    inout WM_PIO36,
-    input WM_TX,
-    inout WM_RX,
-    inout WM_RESET,
-
     // HDMI output
     output [2:0] HDMI_TX,
     output [2:0] HDMI_TX_N,
@@ -88,15 +38,7 @@ module mkrvidor4000_top
     input MIPI_CLK,
     inout MIPI_SDA,
     inout MIPI_SCL,
-    inout [1:0] MIPI_GP,
-
-    // Q-SPI Flash interface
-    output FLASH_SCK,
-    output FLASH_CS,
-    inout FLASH_MOSI,
-    inout FLASH_MISO,
-    inout FLASH_HOLD,
-    inout FLASH_WP
+    inout [1:0] MIPI_GP
 
 );
 
@@ -123,7 +65,21 @@ sawtooth #(.BIT_WIDTH(AUDIO_BIT_WIDTH), .SAMPLE_RATE(AUDIO_RATE), .WAVE_RATE(WAV
 
 logic [23:0] rgb;
 logic [9:0] cx, cy, screen_start_x, screen_start_y;
-hdmi #(.VIDEO_ID_CODE(1), .DDRIO(1),.AUDIO_RATE(AUDIO_RATE), .AUDIO_BIT_WIDTH(AUDIO_BIT_WIDTH)) hdmi(.clk_pixel_x10(clk_pixel_x5), .clk_pixel(clk_pixel), .clk_audio(clk_audio), .rgb(rgb), .audio_sample_word('{audio_sample_word >> 9, audio_sample_word >> 9}), .tmds_p(HDMI_TX), .tmds_clock_p(HDMI_CLK), .tmds_n(HDMI_TX_N), .tmds_clock_n(HDMI_CLK_N), .cx(cx), .cy(cy), .screen_start_x(screen_start_x), .screen_start_y(screen_start_y));
+hdmi #(.VIDEO_ID_CODE(1), .DDRIO(1),.AUDIO_RATE(AUDIO_RATE), .AUDIO_BIT_WIDTH(AUDIO_BIT_WIDTH)) hdmi(
+    .clk_pixel_x10(clk_pixel_x5),
+    .clk_pixel(clk_pixel),
+    .clk_audio(clk_audio),
+    .rgb(rgb),
+    .audio_sample_word('{audio_sample_word >> 9, audio_sample_word >> 9}),
+    .tmds_p(HDMI_TX),
+    .tmds_clock_p(HDMI_CLK),
+    .tmds_n(HDMI_TX_N),
+    .tmds_clock_n(HDMI_CLK_N),
+    .cx(cx),
+    .cy(cy),
+    .screen_start_x(screen_start_x),
+    .screen_start_y(screen_start_y)
+);
 
 logic [1:0] mode = 2'd0;
 logic [1:0] resolution = 2'd3; // 640x480 @ 30FPS
@@ -172,7 +128,7 @@ always @(posedge CLK_48MHZ)
 always @(posedge CLK_48MHZ)
     if (ready && mode == 2'd0)
         mode <= 2'd1;
-    else if (ready && mode == 2'd1 && camera_counter == 26'd67108863)
+    else if (ready && mode == 2'd1 && camera_counter + 1'd1 == 26'd0)
         mode <= 2'd2;
 
 logic pixel_enable;
@@ -200,25 +156,5 @@ arbiter arbiter (
 
 always_ff @(posedge clk_pixel)
     rgb <= {pixel, pixel, pixel};
-
-// logic [7:0] codepoints [0:3];
-// always @(posedge SDRAM_CLK) if (image_data_enable) codepoints <= '{pixel_producer + 8'h30, mipi_consumer + 8'h30, 8'h30 + 8'(command), 8'h29};//'{image_data[1][7:4] + 8'h30, image_data[1][7:4] + 8'h30, image_data[0][7:4] + 8'h30, image_data[0][3:0] + 8'h30};
-
-// logic [1:0] counter = 2'd0;
-// logic [5:0] prevcy = 6'd0;
-// always @(posedge clk_pixel)
-// begin
-//     if (cy == 10'd0)
-//     begin
-//         prevcy <= 6'd0;
-//     end
-//     else if (prevcy != cy[9:4])
-//     begin
-//         counter <= counter + 1'd1;
-//         prevcy <= cy[9:4];
-//     end
-// end
-
-// console console(.clk_pixel(clk_pixel), .codepoint(codepoints[counter]), .attribute({cx[9], cy[8:6], cx[8:5]}), .cx(cx), .cy(cy), .rgb(rgb));
 
 endmodule

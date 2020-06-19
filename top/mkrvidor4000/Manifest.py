@@ -11,6 +11,7 @@ modules = {
         "git@github.com:hdl-util/mipi-ccs.git::master",
         "git@github.com:hdl-util/mipi-csi-2.git::master",
         "git@github.com:hdl-util/sdram-controller.git::master",
+        "git@github.com:hdl-util/clock-domain-crossing.git::master",
     ]
 }
 
