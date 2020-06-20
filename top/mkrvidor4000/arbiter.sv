@@ -53,9 +53,9 @@ as4c4m16sa_controller #(
     .dq(dq)
 );
 
-localparam MIPI_POINTER_WIDTH = 6;
+localparam MIPI_POINTER_WIDTH = 5;
 logic [MIPI_POINTER_WIDTH-1:0] mipi_data_out_used;
-logic mipi_data_out_acknowledge, mipi_data_in_enable = 1'b0;
+logic mipi_data_out_acknowledge, mipi_data_in_enable;
 logic [15:0] mipi_data_in, mipi_data_out;
 
 fifo #(.DATA_WIDTH(16), .POINTER_WIDTH(MIPI_POINTER_WIDTH), .SENDER_DELAY_CHAIN_LENGTH(2)) mipi_write_fifo(
@@ -71,7 +71,7 @@ fifo #(.DATA_WIDTH(16), .POINTER_WIDTH(MIPI_POINTER_WIDTH), .SENDER_DELAY_CHAIN_
 
 logic mipi_data_in_countdown = 1'b0;
 // Relies on https://github.com/hdl-util/mipi-csi-2/commit/cd500bab6395de0696a728ab38a205986fd7be91
-assign mipi_data_in = mipi_data_in_countdown ? {mipi_data[1], mipi_data[0]} : {mipi_data[3], mipi_data[2]};
+assign mipi_data_in = mipi_data_in_countdown ? {mipi_data[3], mipi_data[2]} : {mipi_data[1], mipi_data[0]};
 assign mipi_data_in_enable = mipi_data_enable || mipi_data_in_countdown == 1'b1;
 always_ff @(posedge mipi_clk)
     if (mipi_data_enable)
@@ -79,7 +79,7 @@ always_ff @(posedge mipi_clk)
     else
         mipi_data_in_countdown <= 1'b0;
 
-localparam PIXEL_POINTER_WIDTH = 6;
+localparam PIXEL_POINTER_WIDTH = 5;
 logic [PIXEL_POINTER_WIDTH-1:0] pixel_data_in_used;
 logic [15:0] pixel_data_in, pixel_data_out;
 logic pixel_data_out_acknowledge, pixel_data_in_enable;
@@ -95,9 +95,9 @@ fifo #(.DATA_WIDTH(16), .POINTER_WIDTH(PIXEL_POINTER_WIDTH), .RECEIVER_DELAY_CHA
 );
 logic pixel_data_out_countdown = 1'b0;
 assign pixel = pixel_data_out_countdown ? pixel_data_out[15:8] : pixel_data_out[7:0];
-assign pixel_data_out_acknowledge = pixel_data_out_countdown; // Increment after both bytes are read
+assign pixel_data_out_acknowledge = pixel_data_out_countdown && pixel_enable; // Increment after both bytes are read
 always_ff @(posedge pixel_clk)
-    pixel_data_out_countdown <= !pixel_data_out_countdown;
+    pixel_data_out_countdown <= pixel_enable ? !pixel_data_out_countdown : pixel_data_out_countdown;
 
 
 logic [21:0] mipi_address = 22'd0;
@@ -108,6 +108,7 @@ assign mipi_data_out_acknowledge = (command == 2'd0 && mipi_data_out_used >= 6'd
 assign pixel_data_in_enable = command == 2'd2 && data_read_valid;
 assign pixel_data_in = data_read;
 
+assign data_address = command == 2'd2 ? pixel_address : command == 2'd1 ? mipi_address : 22'dx;
 always_ff @(posedge sdram_clk)
     data_write <= mipi_data_out;
 
@@ -115,22 +116,19 @@ always @(posedge sdram_clk)
 begin
     if (command == 2'd0)
     begin
-        if (pixel_data_in_used <= 6'd50) // Read burst possible
+        if (pixel_data_in_used <= PIXEL_POINTER_WIDTH'(0) - 4'd9) // Read burst possible
         begin
             command <= 2'd2;
-            data_address <= pixel_address;
             sdram_countup <= 3'd0;
         end
-        else if (mipi_data_out_used >= 6'd15) // Write burst possible
+        else if (mipi_data_out_used >= 4'd8) // Write burst possible
         begin
             command <= 2'd1;
-            data_address <= mipi_address;
             sdram_countup <= 1'd1;
         end
         else // Idle
         begin
             command <= 2'd0;
-            data_address <= 22'dx;
             sdram_countup <= 3'dx;
         end
     end
