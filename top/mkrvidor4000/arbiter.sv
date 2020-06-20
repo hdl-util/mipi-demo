@@ -53,7 +53,7 @@ as4c4m16sa_controller #(
     .dq(dq)
 );
 
-localparam MIPI_POINTER_WIDTH = 5;
+localparam MIPI_POINTER_WIDTH = 6;
 logic [MIPI_POINTER_WIDTH-1:0] mipi_data_out_used;
 logic mipi_data_out_acknowledge, mipi_data_in_enable;
 logic [15:0] mipi_data_in, mipi_data_out;
@@ -83,7 +83,7 @@ localparam PIXEL_POINTER_WIDTH = 5;
 logic [PIXEL_POINTER_WIDTH-1:0] pixel_data_in_used;
 logic [15:0] pixel_data_in, pixel_data_out;
 logic pixel_data_out_acknowledge, pixel_data_in_enable;
-fifo #(.DATA_WIDTH(16), .POINTER_WIDTH(PIXEL_POINTER_WIDTH), .RECEIVER_DELAY_CHAIN_LENGTH(2)) pixel_read_fifo(
+fifo #(.DATA_WIDTH(16), .POINTER_WIDTH(PIXEL_POINTER_WIDTH), .RECEIVER_DELAY_CHAIN_LENGTH(1)) pixel_read_fifo(
     .sender_clock(sdram_clk),
     .data_in_enable(pixel_data_in_enable),
     .data_in_used(pixel_data_in_used),
@@ -104,7 +104,7 @@ logic [21:0] mipi_address = 22'd0;
 logic [21:0] pixel_address = 22'd0;
 logic [2:0] sdram_countup = 3'd0;
 
-assign mipi_data_out_acknowledge = (command == 2'd0 && mipi_data_out_used >= 6'd15) || (command == 2'd2 && data_write_done);
+assign mipi_data_out_acknowledge = (command == 2'd0 && mipi_data_out_used >= 4'd8) || (command == 2'd1 && data_write_done);
 assign pixel_data_in_enable = command == 2'd2 && data_read_valid;
 assign pixel_data_in = data_read;
 
