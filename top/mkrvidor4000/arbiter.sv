@@ -7,7 +7,7 @@ module arbiter #(
 
     input logic mipi_clk,
     input logic mipi_data_enable,
-    input logic [7:0] mipi_data [0:3],
+    input logic [7:0] mipi_data [3:0],
 
     input logic sdram_clk,
 	output logic clock_enable,
@@ -58,7 +58,7 @@ logic [MIPI_POINTER_WIDTH-1:0] mipi_data_out_used;
 logic mipi_data_out_acknowledge, mipi_data_in_enable = 1'b0;
 logic [15:0] mipi_data_in, mipi_data_out;
 
-fifo #(.DATA_WIDTH(16), .POINTER_WIDTH(MIPI_POINTER_WIDTH)) mipi_write_fifo(
+fifo #(.DATA_WIDTH(16), .POINTER_WIDTH(MIPI_POINTER_WIDTH), .SENDER_DELAY_CHAIN_LENGTH(2)) mipi_write_fifo(
     .sender_clock(mipi_clk),
     .data_in_enable(mipi_data_in_enable),
     .data_in_used(),
@@ -71,7 +71,7 @@ fifo #(.DATA_WIDTH(16), .POINTER_WIDTH(MIPI_POINTER_WIDTH)) mipi_write_fifo(
 
 logic mipi_data_in_countdown = 1'b0;
 // Relies on https://github.com/hdl-util/mipi-csi-2/commit/cd500bab6395de0696a728ab38a205986fd7be91
-assign mipi_data_in = mipi_data_in_countdown ? {mipi_data[0], mipi_data[1]} : {mipi_data[2], mipi_data[3]};
+assign mipi_data_in = mipi_data_in_countdown ? {mipi_data[1], mipi_data[0]} : {mipi_data[3], mipi_data[2]};
 assign mipi_data_in_enable = mipi_data_enable || mipi_data_in_countdown == 1'b1;
 always_ff @(posedge mipi_clk)
     if (mipi_data_enable)
@@ -83,7 +83,7 @@ localparam PIXEL_POINTER_WIDTH = 6;
 logic [PIXEL_POINTER_WIDTH-1:0] pixel_data_in_used;
 logic [15:0] pixel_data_in, pixel_data_out;
 logic pixel_data_out_acknowledge, pixel_data_in_enable;
-fifo #(.DATA_WIDTH(16), .POINTER_WIDTH(PIXEL_POINTER_WIDTH)) pixel_read_fifo(
+fifo #(.DATA_WIDTH(16), .POINTER_WIDTH(PIXEL_POINTER_WIDTH), .RECEIVER_DELAY_CHAIN_LENGTH(2)) pixel_read_fifo(
     .sender_clock(sdram_clk),
     .data_in_enable(pixel_data_in_enable),
     .data_in_used(pixel_data_in_used),
@@ -104,7 +104,7 @@ logic [21:0] mipi_address = 22'd0;
 logic [21:0] pixel_address = 22'd0;
 logic [2:0] sdram_countup = 3'd0;
 
-assign mipi_data_out_acknowledge = (command == 2'd0 && mipi_data_out_used[MIPI_POINTER_WIDTH-1]) || (command == 2'd2 && data_write_done);
+assign mipi_data_out_acknowledge = (command == 2'd0 && mipi_data_out_used >= 6'd15) || (command == 2'd2 && data_write_done);
 assign pixel_data_in_enable = command == 2'd2 && data_read_valid;
 assign pixel_data_in = data_read;
 
@@ -115,13 +115,13 @@ always @(posedge sdram_clk)
 begin
     if (command == 2'd0)
     begin
-        if (!pixel_data_in_used[PIXEL_POINTER_WIDTH-1]) // Read burst possible, half the fifo is empty
+        if (pixel_data_in_used <= 6'd50) // Read burst possible
         begin
             command <= 2'd2;
             data_address <= pixel_address;
             sdram_countup <= 3'd0;
         end
-        else if (mipi_data_out_used[MIPI_POINTER_WIDTH-1]) // Write burst possible, half the fifo is full
+        else if (mipi_data_out_used >= 6'd15) // Write burst possible
         begin
             command <= 2'd1;
             data_address <= mipi_address;

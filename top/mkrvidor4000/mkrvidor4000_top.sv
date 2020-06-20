@@ -101,7 +101,7 @@ ov5647 #(.INPUT_CLK_RATE(48_000_000), .TARGET_SCL_RATE(100_000)) ov5647 (
     .nack_err(nack_err)
 );
 
-logic [7:0] image_data [0:3];
+logic [7:0] image_data [3:0];
 logic [5:0] image_data_type;
 logic image_data_enable;
 logic [15:0] word_count;
