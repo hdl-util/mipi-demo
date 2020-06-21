@@ -8,6 +8,9 @@ module arbiter #(
     input logic mipi_clk,
     input logic mipi_data_enable,
     input logic [7:0] mipi_data [3:0],
+    input logic frame_start,
+    input logic line_start,
+    input logic interrupt,
 
     input logic sdram_clk,
 	output logic clock_enable,
@@ -53,12 +56,12 @@ as4c4m16sa_controller #(
     .dq(dq)
 );
 
-localparam MIPI_POINTER_WIDTH = 6;
+localparam MIPI_POINTER_WIDTH = 5;
 logic [MIPI_POINTER_WIDTH-1:0] mipi_data_out_used;
 logic mipi_data_out_acknowledge, mipi_data_in_enable;
 logic [15:0] mipi_data_in, mipi_data_out;
 
-fifo #(.DATA_WIDTH(16), .POINTER_WIDTH(MIPI_POINTER_WIDTH), .SENDER_DELAY_CHAIN_LENGTH(2)) mipi_write_fifo(
+fifo #(.DATA_WIDTH(16), .POINTER_WIDTH(MIPI_POINTER_WIDTH), .SENDER_DELAY_CHAIN_LENGTH(3)) mipi_write_fifo(
     .sender_clock(mipi_clk),
     .data_in_enable(mipi_data_in_enable),
     .data_in_used(),
@@ -70,9 +73,11 @@ fifo #(.DATA_WIDTH(16), .POINTER_WIDTH(MIPI_POINTER_WIDTH), .SENDER_DELAY_CHAIN_
 );
 
 logic mipi_data_in_countdown = 1'b0;
-// Relies on https://github.com/hdl-util/mipi-csi-2/commit/cd500bab6395de0696a728ab38a205986fd7be91
-assign mipi_data_in = mipi_data_in_countdown ? {mipi_data[3], mipi_data[2]} : {mipi_data[1], mipi_data[0]};
+assign mipi_data_in = mipi_data_in_countdown ? mipi_data_holding : {mipi_data[1], mipi_data[0]};
 assign mipi_data_in_enable = mipi_data_enable || mipi_data_in_countdown == 1'b1;
+logic [15:0] mipi_data_holding = 16'd0;
+always_ff @(posedge mipi_clk)
+    mipi_data_holding <= {mipi_data[3], mipi_data[2]};
 always_ff @(posedge mipi_clk)
     if (mipi_data_enable)
         mipi_data_in_countdown <= 1'b1;
@@ -114,6 +119,8 @@ always_ff @(posedge sdram_clk)
 
 always @(posedge sdram_clk)
 begin
+    if (interrupt && frame_start)
+        mipi_address <= 22'd0;
     if (command == 2'd0)
     begin
         if (pixel_data_in_used <= PIXEL_POINTER_WIDTH'(0) - 4'd9) // Read burst possible
