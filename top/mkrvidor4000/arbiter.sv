@@ -56,12 +56,12 @@ as4c4m16sa_controller #(
     .dq(dq)
 );
 
-localparam MIPI_POINTER_WIDTH = 5;
+localparam MIPI_POINTER_WIDTH = 8;
 logic [MIPI_POINTER_WIDTH-1:0] mipi_data_out_used;
 logic mipi_data_out_acknowledge, mipi_data_in_enable;
 logic [15:0] mipi_data_in, mipi_data_out;
 
-fifo #(.DATA_WIDTH(16), .POINTER_WIDTH(MIPI_POINTER_WIDTH), .SENDER_DELAY_CHAIN_LENGTH(3)) mipi_write_fifo(
+fifo #(.DATA_WIDTH(16), .POINTER_WIDTH(MIPI_POINTER_WIDTH), .SENDER_DELAY_CHAIN_LENGTH(2)) mipi_write_fifo(
     .sender_clock(mipi_clk),
     .data_in_enable(mipi_data_in_enable),
     .data_in_used(),
@@ -74,17 +74,17 @@ fifo #(.DATA_WIDTH(16), .POINTER_WIDTH(MIPI_POINTER_WIDTH), .SENDER_DELAY_CHAIN_
 
 logic mipi_data_in_countdown = 1'b0;
 assign mipi_data_in = mipi_data_in_countdown ? mipi_data_holding : {mipi_data[1], mipi_data[0]};
-assign mipi_data_in_enable = mipi_data_enable || mipi_data_in_countdown == 1'b1;
+assign mipi_data_in_enable = mipi_data_enable || mipi_data_in_countdown;
 logic [15:0] mipi_data_holding = 16'd0;
 always_ff @(posedge mipi_clk)
     mipi_data_holding <= {mipi_data[3], mipi_data[2]};
 always_ff @(posedge mipi_clk)
-    if (mipi_data_enable)
+    if (interrupt && mipi_data_enable)
         mipi_data_in_countdown <= 1'b1;
     else
         mipi_data_in_countdown <= 1'b0;
 
-localparam PIXEL_POINTER_WIDTH = 5;
+localparam PIXEL_POINTER_WIDTH = 8;
 logic [PIXEL_POINTER_WIDTH-1:0] pixel_data_in_used;
 logic [15:0] pixel_data_in, pixel_data_out;
 logic pixel_data_out_acknowledge, pixel_data_in_enable;
@@ -109,7 +109,7 @@ logic [21:0] mipi_address = 22'd0;
 logic [21:0] pixel_address = 22'd0;
 logic [2:0] sdram_countup = 3'd0;
 
-assign mipi_data_out_acknowledge = (command == 2'd0 && mipi_data_out_used >= 4'd8) || (command == 2'd1 && data_write_done);
+assign mipi_data_out_acknowledge = (command == 2'd0 && mipi_data_out_used[3]) || (command == 2'd1 && data_write_done);
 assign pixel_data_in_enable = command == 2'd2 && data_read_valid;
 assign pixel_data_in = data_read;
 
@@ -119,19 +119,21 @@ always_ff @(posedge sdram_clk)
 
 always @(posedge sdram_clk)
 begin
+    // TODO: merge this into the fifo
+    // all the data should've reached the SDRAM by the time it triggers, but just for clock domain crossing safety, it should be moved back
     if (interrupt && frame_start)
         mipi_address <= 22'd0;
     if (command == 2'd0)
     begin
-        if (pixel_data_in_used <= PIXEL_POINTER_WIDTH'(0) - 4'd9) // Read burst possible
-        begin
-            command <= 2'd2;
-            sdram_countup <= 3'd0;
-        end
-        else if (mipi_data_out_used >= 4'd8) // Write burst possible
+        if (mipi_data_out_used[3]) // Write burst possible (prioritized over read burst)
         begin
             command <= 2'd1;
             sdram_countup <= 1'd1;
+        end
+        else if (!pixel_data_in_used[PIXEL_POINTER_WIDTH-1]) // Read burst possible
+        begin
+            command <= 2'd2;
+            sdram_countup <= 3'd0;
         end
         else // Idle
         begin

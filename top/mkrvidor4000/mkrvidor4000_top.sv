@@ -88,7 +88,7 @@ logic ready;
 logic model_err;
 logic nack_err;
 
-imx219 #(.INPUT_CLK_RATE(48_000_000), .TARGET_SCL_RATE(100_000)) imx219 (
+ov5647 #(.INPUT_CLK_RATE(48_000_000), .TARGET_SCL_RATE(100_000)) ov5647 (
     .clk_in(CLK_48MHZ),
     .scl(MIPI_SCL),
     .sda(MIPI_SDA),
@@ -105,7 +105,7 @@ logic [7:0] image_data [3:0];
 logic [5:0] image_data_type;
 logic image_data_enable;
 logic [15:0] word_count;
-logic frame_start, line_start, interrupt;
+logic frame_start, line_start, interrupt, frame_end;
 camera #(.NUM_LANES(2)) camera (
     .clock_p(MIPI_CLK),
     .data_p(MIPI_D),
@@ -114,6 +114,7 @@ camera #(.NUM_LANES(2)) camera (
     .image_data_enable(image_data_enable),
     .word_count(word_count),
     .frame_start(frame_start),
+    .frame_end(frame_end),
     .line_start(line_start),
     .interrupt(interrupt)
 );
@@ -158,7 +159,7 @@ arbiter arbiter (
     .dq(SDRAM_DQ)
 );
 
-always_ff @(posedge clk_pixel)
+always @(posedge clk_pixel)
     rgb <= {pixel, pixel, pixel};
 
 endmodule
