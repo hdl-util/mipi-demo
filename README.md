@@ -19,6 +19,7 @@ Picture taken with a Pixel 3a of an OV5647 video stream on an LG 4K monitor at 6
 ![Picture of the video stream](demo.jpg)
 
 Please forgive the horrible focus of the image, I'm using a knockoff OV5647 module with fixed-focus.
+The image is received in RAW8 format and hasn't been processed yet, hence the lack of color.
 
 ## What's next?
 
