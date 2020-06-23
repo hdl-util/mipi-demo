@@ -27,7 +27,7 @@ The image is received in RAW8 format and hasn't been processed yet, hence the la
 * IMX219 control
   * This is commonly available as the [Raspberry Pi Camera Module v2](https://www.raspberrypi.org/products/camera-module-v2/)
 * SDRAM controller improvements
-* 
+* much more!
 
 ## Special thanks
 
