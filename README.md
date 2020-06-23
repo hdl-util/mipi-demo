@@ -10,7 +10,7 @@ Cumulative demonstration of a year-long journey working on the following project
 * [hdl-util/mipi-csi-2](https://github.com/hdl-util/mipi-csi-2): camera video reception with [MIPI CSI 2](https://www.mipi.org/specifications/csi-2) 
 * [hdl-util/sdram-controller](https://github.com/hdl-util/sdram-controller/): generic [SDRAM](https://en.wikipedia.org/wiki/Synchronous_dynamic_random-access_memory) controller
 * [hdl-util/clock-domain-crossing](https://github.com/hdl-util/clock-domain-crossing): utilities for [clock domain crossing](https://en.wikipedia.org/wiki/Clock_domain_crossing) on FPGAs
-    * [hdl-util/gray-code](https://github.com/hdl-util/gray-code): arbitrary with [Gray codes](https://en.wikipedia.org/wiki/Gray_code)
+    * [hdl-util/gray-code](https://github.com/hdl-util/gray-code): arbitrary width [Gray codes](https://en.wikipedia.org/wiki/Gray_code)
 
 ## Demo
 
