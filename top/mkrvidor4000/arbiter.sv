@@ -31,10 +31,12 @@ logic [15:0] data_read;
 logic data_read_valid;
 logic data_write_done;
 
+localparam READ_BURST_LENGTH = 8;
+
 as4c4m16sa_controller #(
     .CLK_RATE(140_000_000),
     .SPEED_GRADE(7),
-    .READ_BURST_LENGTH(8),
+    .READ_BURST_LENGTH(READ_BURST_LENGTH),
     .WRITE_BURST(1),
     .CAS_LATENCY(3)
 ) as4c4m16sa (
@@ -117,7 +119,7 @@ assign data_address = command == 2'd2 ? pixel_address : command == 2'd1 ? mipi_a
 always_ff @(posedge sdram_clk)
     data_write <= mipi_data_out;
 
-always @(posedge sdram_clk)
+always_ff @(posedge sdram_clk)
 begin
     // TODO: merge this into the fifo
     // all the data should've reached the SDRAM by the time it triggers, but just for clock domain crossing safety, it should be moved back
@@ -149,7 +151,7 @@ begin
             if (sdram_countup == 3'd7) // Last read
             begin
                 command <= 2'd0;
-                pixel_address <= pixel_address + 22'd8 == 22'(VIDEO_END) ? 22'd0 : pixel_address + 22'd8;
+                pixel_address <= pixel_address + 22'(READ_BURST_LENGTH) == 22'(VIDEO_END) ? 22'd0 : pixel_address + 22'(READ_BURST_LENGTH);
             end
         end
     end
@@ -161,11 +163,10 @@ begin
             if (sdram_countup == 3'd7) // Last write
             begin
                 command <= 2'd0;
-                mipi_address <= mipi_address + 22'd8 == 22'(VIDEO_END) ? 22'd0 : mipi_address + 22'd8;
+                mipi_address <= mipi_address + 22'(READ_BURST_LENGTH) == 22'(VIDEO_END) ? 22'd0 : mipi_address + 22'(READ_BURST_LENGTH);
             end
         end
     end
 end
-
 
 endmodule
