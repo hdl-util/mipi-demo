@@ -65,16 +65,14 @@ sawtooth #(.BIT_WIDTH(AUDIO_BIT_WIDTH), .SAMPLE_RATE(AUDIO_RATE), .WAVE_RATE(WAV
 
 logic [23:0] rgb;
 logic [9:0] cx, cy, screen_start_x, screen_start_y;
-hdmi #(.VIDEO_ID_CODE(1), .DDRIO(1),.AUDIO_RATE(AUDIO_RATE), .AUDIO_BIT_WIDTH(AUDIO_BIT_WIDTH)) hdmi(
-    .clk_pixel_x10(clk_pixel_x5),
+hdmi #(.VIDEO_ID_CODE(1), .AUDIO_RATE(AUDIO_RATE), .AUDIO_BIT_WIDTH(AUDIO_BIT_WIDTH)) hdmi(
+    .clk_pixel_x5(clk_pixel_x5),
     .clk_pixel(clk_pixel),
     .clk_audio(clk_audio),
     .rgb(rgb),
     .audio_sample_word('{audio_sample_word >> 9, audio_sample_word >> 9}),
-    .tmds_p(HDMI_TX),
-    .tmds_clock_p(HDMI_CLK),
-    .tmds_n(HDMI_TX_N),
-    .tmds_clock_n(HDMI_CLK_N),
+    .tmds(HDMI_TX),
+    .tmds_clock(HDMI_CLK),
     .cx(cx),
     .cy(cy),
     .screen_start_x(screen_start_x),

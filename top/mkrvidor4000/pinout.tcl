@@ -252,11 +252,7 @@ set_instance_assignment -name IO_STANDARD LVDS -to HDMI_CLK*
 set_location_assignment PIN_R16 -to HDMI_TX[2]
 set_location_assignment PIN_K15 -to HDMI_TX[1]
 set_location_assignment PIN_J15 -to HDMI_TX[0]
-set_location_assignment PIN_P16 -to HDMI_TX_N[2]
-set_location_assignment PIN_K16 -to HDMI_TX_N[1]
-set_location_assignment PIN_J16 -to HDMI_TX_N[0]
 set_location_assignment PIN_N15 -to HDMI_CLK
-set_location_assignment PIN_N16 -to HDMI_CLK_N
 set_instance_assignment -name IO_STANDARD "2.5 V" -to HDMI_SCL
 set_instance_assignment -name IO_STANDARD "2.5 V" -to HDMI_SDA
 set_location_assignment PIN_K5 -to HDMI_SCL
