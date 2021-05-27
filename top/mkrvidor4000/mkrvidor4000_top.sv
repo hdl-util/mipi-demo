@@ -25,9 +25,7 @@ module mkrvidor4000_top
 
     // HDMI output
     output [2:0] HDMI_TX,
-    output [2:0] HDMI_TX_N,
     output HDMI_CLK,
-    output HDMI_CLK_N,
     inout HDMI_SDA,
     inout HDMI_SCL,
 
@@ -64,7 +62,7 @@ logic [AUDIO_BIT_WIDTH-1:0] audio_sample_word;
 sawtooth #(.BIT_WIDTH(AUDIO_BIT_WIDTH), .SAMPLE_RATE(AUDIO_RATE), .WAVE_RATE(WAVE_RATE)) sawtooth (.clk_audio(clk_audio), .level(audio_sample_word));
 
 logic [23:0] rgb;
-logic [9:0] cx, cy, screen_start_x, screen_start_y;
+logic [9:0] cx, cy, screen_width, screen_height;
 hdmi #(.VIDEO_ID_CODE(1), .AUDIO_RATE(AUDIO_RATE), .AUDIO_BIT_WIDTH(AUDIO_BIT_WIDTH)) hdmi(
     .clk_pixel_x5(clk_pixel_x5),
     .clk_pixel(clk_pixel),
@@ -75,8 +73,8 @@ hdmi #(.VIDEO_ID_CODE(1), .AUDIO_RATE(AUDIO_RATE), .AUDIO_BIT_WIDTH(AUDIO_BIT_WI
     .tmds_clock(HDMI_CLK),
     .cx(cx),
     .cy(cy),
-    .screen_start_x(screen_start_x),
-    .screen_start_y(screen_start_y)
+    .screen_width(screen_width),
+    .screen_height(screen_height)
 );
 
 logic [1:0] mode = 2'd0;
@@ -132,7 +130,7 @@ always @(posedge CLK_48MHZ)
         mode <= 2'd2;
 
 logic pixel_enable;
-assign pixel_enable = cx >= screen_start_x && cy >= screen_start_y;
+assign pixel_enable = cx < screen_width && cy < screen_height;
 logic [7:0] pixel;
 
 arbiter arbiter (
